@@ -1,0 +1,96 @@
+version: '3.8'
+
+services:
+  # Frontend
+  frontend:
+    build:
+      context: .
+      dockerfile: infra/Dockerfile.frontend
+    ports:
+      - '3000:3000'
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    environment:
+      - NODE_ENV=development
+      - NEXT_PUBLIC_API_URL=http://localhost:4000/api
+      - NEXT_PUBLIC_APP_URL=http://localhost:3000
+    depends_on:
+      - backend
+    networks:
+      - felaco-network
+
+  # Backend
+  backend:
+    build:
+      context: .
+      dockerfile: infra/Dockerfile.backend
+    ports:
+      - '4000:4000'
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+    environment:
+      - NODE_ENV=development
+      - PORT=4000
+      - DATABASE_URL=postgres://postgres:postgres@postgres:5432/felaco
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ADMIN_EMAIL=${ADMIN_EMAIL}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - felaco-network
+
+  # Database
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=felaco
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - '5432:5432'
+    networks:
+      - felaco-network
+
+  # Redis
+  redis:
+    image: redis:7-alpine
+    ports:
+      - '6379:6379'
+    volumes:
+      - redis_data:/data
+    networks:
+      - felaco-network
+
+  # Nginx (for production)
+  nginx:
+    image: nginx:alpine
+    ports:
+      - '80:80'
+      - '443:443'
+    volumes:
+      - ./infra/nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./infra/nginx/conf.d:/etc/nginx/conf.d
+      - ./frontend/.next/static:/app/.next/static
+      - ./templates:/app/templates
+    depends_on:
+      - frontend
+      - backend
+    networks:
+      - felaco-network
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  felaco-network:
+    driver: bridge
